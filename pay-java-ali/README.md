@@ -3,15 +3,39 @@
 ## 支付宝支付简单例子
 
 #### 支付配置
-
+##### 普通公钥
 ```java
-
-
+    
+        
         AliPayConfigStorage aliPayConfigStorage = new AliPayConfigStorage();
         aliPayConfigStorage.setPid("合作者id");
         aliPayConfigStorage.setAppid("应用id");
         aliPayConfigStorage.setKeyPublic("支付宝公钥");
         aliPayConfigStorage.setKeyPrivate("应用私钥");
+        aliPayConfigStorage.setNotifyUrl("异步回调地址");
+        aliPayConfigStorage.setReturnUrl("同步回调地址");
+        aliPayConfigStorage.setSignType("签名方式");
+        aliPayConfigStorage.setSeller("收款账号");
+        aliPayConfigStorage.setInputCharset("utf-8");
+        //是否为测试账号，沙箱环境
+        aliPayConfigStorage.setTest(true);
+        
+```
+##### 证书公钥
+```java
+    
+        
+        AliPayConfigStorage aliPayConfigStorage = new AliPayConfigStorage();
+        aliPayConfigStorage.setPid("合作者id");
+        aliPayConfigStorage.setAppid("应用id");
+        aliPayConfigStorage.setKeyPrivate("应用私钥");
+        //设置为证书方式
+        aliPayConfigStorage.setCertSign(true);
+        //设置证书存储方式，这里为路径
+        aliPayConfigStorage.setCertStoreType(CertStoreType.PATH);
+        aliPayConfigStorage.setMerchantCert("请填写您的应用公钥证书文件路径，例如：d:/appCertPublicKey_2019051064521003.crt");
+        aliPayConfigStorage.setAliPayCert("请填写您的支付宝公钥证书文件路径，例如：d:/alipayCertPublicKey_RSA2.crt");
+        aliPayConfigStorage.setAliPayRootCert("请填写您的支付宝根证书文件路径，例如：d:/alipayRootCert.crt");
         aliPayConfigStorage.setNotifyUrl("异步回调地址");
         aliPayConfigStorage.setReturnUrl("同步回调地址");
         aliPayConfigStorage.setSignType("签名方式");
@@ -85,7 +109,7 @@
 ```java
 
         //支付订单基础信息
-        PayOrder payOrder = new PayOrder("订单title", "摘要",  new BigDecimal(0.01) , UUID.randomUUID().toString().replace("-", ""));
+        PayOrder payOrder = new PayOrder("订单title", "摘要",  BigDecimal.valueOf(0.01) , UUID.randomUUID().toString().replace("-", ""));
   
 ``` 
 
@@ -114,6 +138,18 @@
         /*-----------/APP-------------------*/
 
 ``` 
+#### 小程序支付
+
+```java
+
+        /*-----------APP-------------------*/
+        payOrder.setTransactionType(AliTransactionType.MINAPP);
+        payOrder.setOpenid("支付宝小程序授权登录成功后获取到的支付宝 user_id")
+        //获取小程序支付所需的信息组，直接给小程序网页端就可使用
+        Map appOrderInfo = service.orderInfo(payOrder);
+        /*-----------/APP-------------------*/
+
+``` 
 
 #### 即时到帐 WAP 网页支付
 
@@ -122,7 +158,7 @@
         /*-----------即时到帐 WAP 网页支付-------------------*/
 //        payOrder.setTransactionType(AliTransactionType.WAP); //WAP支付
 
-        payOrder.setTransactionType(AliTransactionType.DIRECT); // 即时到帐 PC网页支付
+        payOrder.setTransactionType(AliTransactionType.PAGE); // 即时到帐 PC网页支付
         //获取支付所需的信息
         Map directOrderInfo = service.orderInfo(payOrder);
         //获取表单提交对应的字符串，将其序列化到页面即可,
@@ -197,7 +233,7 @@
 
 ```java
         
-      Map result = service..query("支付宝单号", "我方系统单号");
+      Map result = service.query("支付宝单号", "我方系统单号");
 
 ```
 
@@ -224,7 +260,7 @@
          RefundOrder order = new RefundOrder("支付宝单号", "我方系统单号", "退款金额", "订单总金额");
          //非必填， 根据业务需求而定，可用于多次退款
          order.setRefundNo("退款单号")
-         Map result = service.refund(order);
+         AliRefundResult result = service.refund(order);
 
 ```
 

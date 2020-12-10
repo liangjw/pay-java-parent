@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.nio.charset.Charset;
+import java.util.List;
 import java.util.Map;
 
 
@@ -141,12 +142,9 @@ public class XML {
         for (int idx = 0; idx < children.getLength(); ++idx) {
             Node node = children.item(idx);
             NodeList nodeList = node.getChildNodes();
-            if (node.getNodeType() == Node.ELEMENT_NODE && nodeList.getLength() <= 1) {
-                if (null == json) {
-                    json = new JSONObject();
-                }
-                ((JSONObject) json).put(node.getNodeName(), node.getTextContent());
-            } else if (node.getNodeType() == Node.ELEMENT_NODE && nodeList.getLength() > 1) {
+            int length = nodeList.getLength();
+
+            if (node.getNodeType() == Node.ELEMENT_NODE && length >= 1 && nodeList.item(0).hasChildNodes()) {
                 if (null == json) {
                     json = new JSONObject();
                 }
@@ -166,6 +164,11 @@ public class XML {
                     c.put(node.getNodeName(), getChildren(nodeList));
                     ((JSONArray) json).add(c);
                 }
+            } else if (node.getNodeType() == Node.ELEMENT_NODE ) {
+                if (null == json) {
+                    json = new JSONObject();
+                }
+                ((JSONObject) json).put(node.getNodeName(), node.getTextContent());
             }
         }
 
@@ -198,20 +201,8 @@ public class XML {
      * @throws IOException  xml io转化异常
      */
     public static <T> T inputStream2Bean(InputStream in, Class<T> clazz) throws IOException {
-        try {
-
-            DocumentBuilder documentBuilder = newDocumentBuilder();
-            org.w3c.dom.Document doc = documentBuilder.parse(in);
-            doc.getDocumentElement().normalize();
-            NodeList children = doc.getDocumentElement().getChildNodes();
-            JSON json = getChildren(children);
-            return json.toJavaObject(clazz);
-        } catch (Exception e) {
-            throw new PayErrorException(new PayException("XML failure", "XML解析失败\n" + e.getMessage()));
-        } finally {
-            in.close();
-        }
-
+        JSON json = toJSONObject(in);
+        return json.toJavaObject(clazz);
     }
 
     /**
@@ -232,14 +223,14 @@ public class XML {
             for (int idx = 0; idx < children.getLength(); ++idx) {
                 Node node = children.item(idx);
                 NodeList nodeList = node.getChildNodes();
-                if (node.getNodeType() == Node.ELEMENT_NODE && nodeList.getLength() <= 1) {
-                    m.put(node.getNodeName(), node.getTextContent());
-                } else if (node.getNodeType() == Node.ELEMENT_NODE && nodeList.getLength() > 1) {
+                int length = nodeList.getLength();
+                if (node.getNodeType() == Node.ELEMENT_NODE && (length >1 || length==1 && nodeList.item(0).hasChildNodes())) {
                     m.put(node.getNodeName(), getChildren(nodeList));
+                } else if (node.getNodeType() == Node.ELEMENT_NODE ) {
+                    m.put(node.getNodeName(), node.getTextContent());
                 }
             }
         } catch (Exception e) {
-//            e.printStackTrace();
             throw new PayErrorException(new PayException("XML failure", "XML解析失败\n" + e.getMessage()));
         } finally {
             in.close();
@@ -323,13 +314,42 @@ public class XML {
                 value = "";
             }
             org.w3c.dom.Element filed = document.createElement(entry.getKey());
-            if (value instanceof Map){
+           /* if (value instanceof Map){
+                map2Xml((Map)value, document, filed);
+            }else if (value instanceof List){
+                List vs = (List)value;
+                for (Object  v : vs ){
+                    if (value instanceof Map){
+                        map2Xml((Map)value, document, filed);
+                    }
+                }
                 map2Xml((Map)value, document, filed);
             }else {
                 value = value.toString().trim();
                 filed.appendChild(document.createTextNode(value.toString()));
-            }
+            }*/
+            object2Xml(value, document, filed);
             element.appendChild(filed);
         }
     }
+
+    private static void object2Xml(Object value, Document document, org.w3c.dom.Element element){
+
+        if (value instanceof Map){
+            map2Xml((Map)value, document, element);
+        }else if (value instanceof List){
+            List vs = (List)value;
+            for (Object  v : vs ){
+                object2Xml(v, document, element);
+            }
+//            map2Xml((Map)value, document, element);
+        }else {
+            value = value.toString().trim();
+            element.appendChild(document.createTextNode(value.toString()));
+        }
+
+
+    }
+
+
 }

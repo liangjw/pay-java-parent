@@ -7,14 +7,13 @@ import com.egzosn.pay.common.bean.*;
 import com.egzosn.pay.common.bean.result.PayError;
 import com.egzosn.pay.common.exception.PayErrorException;
 import com.egzosn.pay.common.http.HttpConfigStorage;
-import com.egzosn.pay.common.util.MatrixToImageWriter;
 import com.egzosn.pay.common.util.Util;
 import com.egzosn.pay.common.util.sign.SignUtils;
 import com.egzosn.pay.common.util.str.StringUtils;
 import com.egzosn.pay.wx.youdian.bean.WxYoudianPayMessage;
 import com.egzosn.pay.wx.youdian.bean.YdPayError;
 import com.egzosn.pay.wx.youdian.bean.YoudianTransactionType;
-import java.awt.image.BufferedImage;
+
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.*;
@@ -227,6 +226,7 @@ public class WxYouDianPayService extends BasePayService<WxYouDianPayConfigStorag
         Map<String, Object> data = new TreeMap<>();
         data.put("access_token",  getAccessToken());
         data.put("paymoney", Util.conversionAmount(order.getPrice()).toString());
+        data.putAll(order.getAttrs());
         data =  preOrderHandler(data, order);
         String apbNonce = SignUtils.randomStr();
         String sign = createSign(SignUtils.parameterText(data, "") + apbNonce, payConfigStorage.getInputCharset());
@@ -336,6 +336,7 @@ public class WxYouDianPayService extends BasePayService<WxYouDianPayConfigStorag
 
     @Override
     public String getQrPay(PayOrder order) {
+        order.setTransactionType(YoudianTransactionType.NATIVE);
         JSONObject orderInfo = orderInfo(order);
         return (String) orderInfo.get("code_url");
     }
@@ -347,6 +348,7 @@ public class WxYouDianPayService extends BasePayService<WxYouDianPayConfigStorag
      */
     @Override
     public Map<String, Object> microPay(PayOrder order) {
+        order.setTransactionType(YoudianTransactionType.MICROPAY);
         JSONObject orderInfo = orderInfo(order);
         return orderInfo;
     }
@@ -382,15 +384,16 @@ public class WxYouDianPayService extends BasePayService<WxYouDianPayConfigStorag
     }
 
 
+
+
+    /**
+     * 申请退款接口
+     *
+     * @param refundOrder 退款订单信息
+     * @return 返回支付方申请退款后的结果
+     */
     @Override
-    public Map<String, Object> refund(String tradeNo, String outTradeNo, BigDecimal refundAmount, BigDecimal totalAmount) {
-        return refund(new RefundOrder(tradeNo, outTradeNo,refundAmount, totalAmount));
-    }
-
-
-
-    @Override
-    public Map<String, Object> refund(RefundOrder refundOrder) {
+    public RefundResult refund(RefundOrder refundOrder) {
         String apbNonce = SignUtils.randomStr();
         TreeMap<String, String> data = new TreeMap<>();
         data.put("access_token",  payConfigStorage.getAccessToken());
@@ -405,15 +408,55 @@ public class WxYouDianPayService extends BasePayService<WxYouDianPayConfigStorag
         data.put("refund_fee", refundOrder.getRefundAmount().setScale(2, BigDecimal.ROUND_HALF_UP).toString());
         String sign = createSign(SignUtils.parameterText(data, "") + apbNonce, payConfigStorage.getInputCharset());
         String queryParam =  SignUtils.parameterText(data) +  "&apb_nonce=" + apbNonce + "&sign=" + sign;
-        JSONObject jsonObject = execute(getReqUrl(YoudianTransactionType.NATIVE_STATUS) + "?"  +  queryParam, MethodType.GET, null);
-        return jsonObject;
+        JSONObject jsonObject = execute(getReqUrl(YoudianTransactionType.REFUND) + "?"  +  queryParam, MethodType.GET, null);
+        return new BaseRefundResult() {
+            @Override
+            public String getCode() {
+                return getAttrString("errorcode");
+            }
+
+            @Override
+            public String getMsg() {
+                return getAttrString("msg");
+            }
+
+            @Override
+            public String getResultCode() {
+                return null;
+            }
+
+            @Override
+            public String getResultMsg() {
+                return null;
+            }
+
+            @Override
+            public BigDecimal getRefundFee() {
+                return null;
+            }
+
+            @Override
+            public CurType getRefundCurrency() {
+                return null;
+            }
+
+            @Override
+            public String getTradeNo() {
+                return null;
+            }
+
+            @Override
+            public String getOutTradeNo() {
+                return null;
+            }
+
+            @Override
+            public String getRefundNo() {
+                return null;
+            }
+        };
     }
 
-
-    @Override
-    public Map<String, Object> refundquery(String tradeNo, String outTradeNo) {
-        return Collections.emptyMap();
-    }
 
     /**
      * 查询退款

@@ -1,65 +1,80 @@
 package com.egzosn.pay.wx.api;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URLEncoder;
+import java.security.GeneralSecurityException;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.zip.GZIPInputStream;
+
+import static com.egzosn.pay.wx.api.WxConst.APPID;
+import static com.egzosn.pay.wx.api.WxConst.CIPHER_ALGORITHM;
+import static com.egzosn.pay.wx.api.WxConst.FAIL;
+import static com.egzosn.pay.wx.api.WxConst.FAILURE;
+import static com.egzosn.pay.wx.api.WxConst.HMACSHA256;
+import static com.egzosn.pay.wx.api.WxConst.HMAC_SHA256;
+import static com.egzosn.pay.wx.api.WxConst.MCH_ID;
+import static com.egzosn.pay.wx.api.WxConst.NONCE_STR;
+import static com.egzosn.pay.wx.api.WxConst.OUT_TRADE_NO;
+import static com.egzosn.pay.wx.api.WxConst.RESULT_CODE;
+import static com.egzosn.pay.wx.api.WxConst.RETURN_CODE;
+import static com.egzosn.pay.wx.api.WxConst.RETURN_MSG_CODE;
+import static com.egzosn.pay.wx.api.WxConst.SANDBOXNEW;
+import static com.egzosn.pay.wx.api.WxConst.SIGN;
+import static com.egzosn.pay.wx.api.WxConst.SUCCESS;
+import static com.egzosn.pay.wx.api.WxConst.URI;
+import static com.egzosn.pay.wx.bean.WxTransferType.GETTRANSFERINFO;
+import static com.egzosn.pay.wx.bean.WxTransferType.QUERY_BANK;
+import static com.egzosn.pay.wx.bean.WxTransferType.TRANSFERS;
+
 import com.alibaba.fastjson.JSONObject;
 import com.egzosn.pay.common.api.BasePayService;
-import com.egzosn.pay.common.api.Callback;
-import com.egzosn.pay.common.bean.*;
+import com.egzosn.pay.common.bean.MethodType;
+import com.egzosn.pay.common.bean.PayMessage;
+import com.egzosn.pay.common.bean.PayOrder;
+import com.egzosn.pay.common.bean.PayOutMessage;
+import com.egzosn.pay.common.bean.RefundOrder;
+import com.egzosn.pay.common.bean.SignType;
+import com.egzosn.pay.common.bean.TransactionType;
+import com.egzosn.pay.common.bean.TransferOrder;
 import com.egzosn.pay.common.bean.result.PayException;
 import com.egzosn.pay.common.exception.PayErrorException;
+import com.egzosn.pay.common.http.ClientHttpRequest;
 import com.egzosn.pay.common.http.HttpConfigStorage;
+import com.egzosn.pay.common.http.HttpStringEntity;
 import com.egzosn.pay.common.util.DateUtils;
-import com.egzosn.pay.common.util.MatrixToImageWriter;
 import com.egzosn.pay.common.util.Util;
+import com.egzosn.pay.common.util.XML;
 import com.egzosn.pay.common.util.sign.SignUtils;
 import com.egzosn.pay.common.util.sign.encrypt.RSA2;
 import com.egzosn.pay.common.util.str.StringUtils;
+import com.egzosn.pay.wx.bean.RedpackOrder;
 import com.egzosn.pay.wx.bean.WxPayError;
 import com.egzosn.pay.wx.bean.WxPayMessage;
+import com.egzosn.pay.wx.bean.WxRefundResult;
+import com.egzosn.pay.wx.bean.WxSendredpackType;
 import com.egzosn.pay.wx.bean.WxTransactionType;
-import com.egzosn.pay.common.util.XML;
 import com.egzosn.pay.wx.bean.WxTransferType;
-import java.awt.image.BufferedImage;
-import java.io.IOException;
-import java.io.InputStream;
-import java.math.BigDecimal;
-import java.net.URLEncoder;
-import java.util.*;
-
-import static com.egzosn.pay.wx.bean.WxTransferType.*;
 
 /**
  * 微信支付服务
  *
  * @author egan
- *         <pre>
- *                 email egzosn@gmail.com
- *                 date 2016-5-18 14:09:01
- *                 </pre>
+ * <pre>
+ * email egzosn@gmail.com
+ * date 2016-5-18 14:09:01
+ * </pre>
  */
-public class WxPayService extends BasePayService<WxPayConfigStorage> {
-
-
-    /**
-     * 微信请求地址
-     */
-    public static final String URI = "https://api.mch.weixin.qq.com/";
-    /**
-     * 沙箱
-     */
-    public static final String SANDBOXNEW = "sandboxnew/";
-
-    public static final String SUCCESS = "SUCCESS";
-    public static final String RETURN_CODE = "return_code";
-    public static final String SIGN = "sign";
-    public static final String CIPHER_ALGORITHM = "RSA/ECB/OAEPWITHSHA-1ANDMGF1PADDING";
-    public static final String FAILURE = "failure";
-    public static final String APPID = "appid";
-    private static final String HMAC_SHA256 = "HMAC-SHA256";
-    private static final String HMACSHA256 = "HMACSHA256";
-    private static final String RETURN_MSG_CODE = "return_msg";
-    private static final String RESULT_CODE = "result_code";
-    private static final String MCH_ID = "mch_id";
-    private static final String NONCE_STR = "nonce_str";
+public class WxPayService extends BasePayService<WxPayConfigStorage> implements WxRedPackService,WxBillService {
 
 
     /**
@@ -95,6 +110,7 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
         this.payConfigStorage = payConfigStorage;
         return this;
     }
+
     /**
      * 根据交易类型获取url
      *
@@ -116,18 +132,15 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
     @Override
     public boolean verify(Map<String, Object> params) {
 
-        if (!(SUCCESS.equals(params.get(RETURN_CODE)) && SUCCESS.equals(params.get(RESULT_CODE)))) {
-            LOG.debug(String.format("微信支付异常：return_code=%s,参数集=%s", params.get(RETURN_CODE), params));
-            return false;
-        }
-
-        if (null == params.get(SIGN)) {
-            LOG.debug("微信支付异常：签名为空！out_trade_no=" + params.get("out_trade_no"));
+        if (null == params.get(SIGN) || !(SUCCESS.equals(params.get(RETURN_CODE)) && SUCCESS.equals(params.get(RESULT_CODE))) ) {
+            if (LOG.isErrorEnabled()) {
+                LOG.error(String.format("微信支付异常：return_code=%s,参数集=%s", params.get(RETURN_CODE), params));
+            }
             return false;
         }
 
         try {
-            return signVerify(params, (String) params.get(SIGN)) && verifySource((String) params.get("out_trade_no"));
+            return signVerify(params, (String) params.get(SIGN)) && verifySource((String) params.get(OUT_TRADE_NO));
         } catch (PayErrorException e) {
             LOG.error(e);
         }
@@ -180,12 +193,8 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
         parameters.put(APPID, payConfigStorage.getAppid());
         parameters.put(MCH_ID, payConfigStorage.getMchId());
         //判断如果是服务商模式信息则加入
-        if (!StringUtils.isEmpty(payConfigStorage.getSubMchId())) {
-            parameters.put("sub_mch_id", payConfigStorage.getSubMchId());
-        }
-        if (!StringUtils.isEmpty(payConfigStorage.getSubAppid())) {
-            parameters.put("sub_appid", payConfigStorage.getSubAppid());
-        }
+        setParameters(parameters, "sub_mch_id", payConfigStorage.getSubMchId());
+        setParameters(parameters, "sub_appid", payConfigStorage.getSubAppid());
         parameters.put(NONCE_STR, SignUtils.randomStr());
         return parameters;
 
@@ -206,23 +215,34 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
         // 购买支付信息
         parameters.put("body", order.getSubject());
         // 购买支付信息
-//        parameters.put("detail", order.getBody());
+        setParameters(parameters, "detail", order);
         // 订单号
-        parameters.put("out_trade_no", order.getOutTradeNo());
+        parameters.put(OUT_TRADE_NO, order.getOutTradeNo());
         parameters.put("spbill_create_ip", StringUtils.isEmpty(order.getSpbillCreateIp()) ? "192.168.1.150" : order.getSpbillCreateIp());
         // 总金额单位为分
         parameters.put("total_fee", Util.conversionCentAmount(order.getPrice()));
-        if (StringUtils.isNotEmpty(order.getAddition())) {
-            parameters.put("attach", order.getAddition());
-        }
+        setParameters(parameters, "attach", order.getAddition());
         parameters.put("notify_url", payConfigStorage.getNotifyUrl());
+        setParameters(parameters, "notify_url", order);
         parameters.put("trade_type", order.getTransactionType().getType());
         if (null != order.getExpirationTime()) {
             parameters.put("time_start", DateUtils.formatDate(new Date(), DateUtils.YYYYMMDDHHMMSS));
             parameters.put("time_expire", DateUtils.formatDate(order.getExpirationTime(), DateUtils.YYYYMMDDHHMMSS));
         }
+
+        if (null != order.getCurType()) {
+            parameters.put("fee_type", order.getCurType().getType());
+        }
+
         ((WxTransactionType) order.getTransactionType()).setAttribute(parameters, order);
-        parameters =  preOrderHandler(parameters, order);
+        //可覆盖参数
+/*        setParameters(parameters, "notify_url", order);
+        setParameters(parameters, "goods_tag", order);
+        setParameters(parameters, "limit_pay", order);
+        setParameters(parameters, "receipt", order);
+        setParameters(parameters, "product_id", order);*/
+        parameters.putAll(order.getAttrs());
+        parameters = preOrderHandler(parameters, order);
         setSign(parameters);
 
         String requestXML = XML.getMap2Xml(parameters);
@@ -230,8 +250,10 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
             LOG.debug("requestXML：" + requestXML);
         }
 
+        HttpStringEntity entity = new HttpStringEntity(requestXML, ClientHttpRequest.APPLICATION_XML_UTF_8);
+
         //调起支付的参数列表
-        JSONObject result = requestTemplate.postForObject(getReqUrl(order.getTransactionType()), requestXML, JSONObject.class);
+        JSONObject result = requestTemplate.postForObject(getReqUrl(order.getTransactionType()), entity, JSONObject.class);
 
         if (!SUCCESS.equals(result.get(RETURN_CODE)) || !SUCCESS.equals(result.get(RESULT_CODE))) {
             throw new PayErrorException(new WxPayError(result.getString(RESULT_CODE), result.getString(RETURN_MSG_CODE), result.toJSONString()));
@@ -275,7 +297,6 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
                 params.put("noncestr", result.get(NONCE_STR));
                 params.put("package", "Sign=WXPay");
             }
-            params =  preOrderHandler(params, order);
             String paySign = createSign(SignUtils.parameterText(params), payConfigStorage.getInputCharset());
             params.put(SIGN, paySign);
             return params;
@@ -291,11 +312,12 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
      * @return 请求参数
      */
     private Map<String, Object> setSign(Map<String, Object> parameters) {
-        String signType = payConfigStorage.getSignType();
-        if (HMACSHA256.equals(signType)) {
-            signType = HMAC_SHA256;
+
+        String signTypeStr = payConfigStorage.getSignType();
+        if (HMACSHA256.equals(signTypeStr)) {
+            signTypeStr = SignUtils.HMACSHA256.getName();
         }
-        parameters.put("sign_type", signType);
+        parameters.put("sign_type", signTypeStr);
         String sign = createSign(SignUtils.parameterText(parameters, "&", SIGN, "appId"), payConfigStorage.getInputCharset());
         parameters.put(SIGN, sign);
         return parameters;
@@ -318,7 +340,8 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
         String sign = createSign(SignUtils.parameterText(parameters, "&", SIGN, "appId"), payConfigStorage.getInputCharset(), false);
         parameters.put(SIGN, sign);
 
-        JSONObject result = requestTemplate.postForObject(getReqUrl(WxTransactionType.GETSIGNKEY), XML.getMap2Xml(parameters), JSONObject.class);
+        HttpStringEntity entity = new HttpStringEntity(XML.getMap2Xml(parameters), ClientHttpRequest.APPLICATION_XML_UTF_8);
+        JSONObject result = requestTemplate.postForObject(getReqUrl(WxTransactionType.GETSIGNKEY), entity, JSONObject.class);
         if (SUCCESS.equals(result.get(RETURN_CODE))) {
             return result.getString("sandbox_signkey");
         }
@@ -338,21 +361,22 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
 
         return createSign(content, characterEncoding, payConfigStorage.isTest());
     }
+
     /**
      * 签名
      *
      * @param content           需要签名的内容 不包含key
      * @param characterEncoding 字符编码
-     * @param test 是否为沙箱环境
+     * @param test              是否为沙箱环境
      * @return 签名结果
      */
     public String createSign(String content, String characterEncoding, boolean test) {
-        SignUtils signUtils = SignUtils.valueOf(payConfigStorage.getSignType().toUpperCase());
+        SignType signType = SignUtils.valueOf(payConfigStorage.getSignType().toUpperCase());
         String keyPrivate = payConfigStorage.getKeyPrivate();
-        if (test){
+        if (test) {
             keyPrivate = getKeyPrivate();
         }
-        return signUtils.createSign(content + "&key=" + (signUtils == SignUtils.MD5 ? "" : keyPrivate), keyPrivate, characterEncoding).toUpperCase();
+        return signType.createSign(content + "&key=" + (signType == SignUtils.MD5 ? "" : keyPrivate), keyPrivate, characterEncoding).toUpperCase();
     }
 
     /**
@@ -426,14 +450,16 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
      * @return 返回二维码信息,，支付时需要的
      */
     @Override
-    public String getQrPay(PayOrder order){
+    public String getQrPay(PayOrder order) {
+        order.setTransactionType(WxTransactionType.NATIVE);
         Map<String, Object> orderInfo = orderInfo(order);
         //获取对应的支付账户操作工具（可根据账户id）
         if (!SUCCESS.equals(orderInfo.get(RESULT_CODE))) {
-            throw new PayErrorException(new WxPayError((String)orderInfo.get("err_code"), orderInfo.toString()));
+            throw new PayErrorException(new WxPayError((String) orderInfo.get("err_code"), orderInfo.toString()));
         }
         return (String) orderInfo.get("code_url");
     }
+
     /**
      * 刷卡付,pos主动扫码付款
      *
@@ -442,7 +468,12 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
      */
     @Override
     public Map<String, Object> microPay(PayOrder order) {
+        if (null == order.getTransactionType()) {
+            order.setTransactionType(WxTransactionType.MICROPAY);
 
+        } else if (WxTransactionType.MICROPAY != order.getTransactionType() && WxTransactionType.FACEPAY != order.getTransactionType()) {
+            throw new PayErrorException(new PayException("-1", "错误的交易类型:" + order.getTransactionType()));
+        }
         return orderInfo(order);
     }
 
@@ -485,30 +516,6 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
         return secondaryInterface(transactionId, outTradeNo, WxTransactionType.REVERSE);
     }
 
-    /**
-     * 退款
-     *
-     * @param transactionId 微信订单号
-     * @param outTradeNo    商户单号
-     * @param refundAmount  退款金额
-     * @param totalAmount   总金额
-     * @return 返回支付方申请退款后的结果
-     * @see #refund(RefundOrder, Callback)
-     */
-    @Deprecated
-    @Override
-    public Map<String, Object> refund(String transactionId, String outTradeNo, BigDecimal refundAmount, BigDecimal totalAmount) {
-
-        return refund(new RefundOrder(transactionId, outTradeNo, refundAmount, totalAmount));
-    }
-
-
-    private Map<String, Object> setParameters(Map<String, Object> parameters, String key, String value) {
-        if (!StringUtils.isEmpty(value)) {
-            parameters.put(key, value);
-        }
-        return parameters;
-    }
 
     /**
      * 申请退款接口
@@ -517,35 +524,27 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
      * @return 返回支付方申请退款后的结果
      */
     @Override
-    public Map<String, Object> refund(RefundOrder refundOrder) {
+    public WxRefundResult refund(RefundOrder refundOrder) {
         //获取公共参数
         Map<String, Object> parameters = getPublicParameters();
 
         setParameters(parameters, "transaction_id", refundOrder.getTradeNo());
-        setParameters(parameters, "out_trade_no", refundOrder.getOutTradeNo());
+        setParameters(parameters, OUT_TRADE_NO, refundOrder.getOutTradeNo());
         setParameters(parameters, "out_refund_no", refundOrder.getRefundNo());
         parameters.put("total_fee", Util.conversionCentAmount(refundOrder.getTotalAmount()));
         parameters.put("refund_fee", Util.conversionCentAmount(refundOrder.getRefundAmount()));
-        parameters.put("op_user_id", payConfigStorage.getPid());
-        setParameters(parameters, "notify_url",  payConfigStorage.getNotifyUrl());
-
+        setParameters(parameters, "notify_url", payConfigStorage.getNotifyUrl());
+        if (null != refundOrder.getCurType()) {
+            parameters.put("refund_fee_type", refundOrder.getCurType().getType());
+        }
+        setParameters(parameters, "refund_desc", refundOrder.getDescription());
+        //附加参数，这里可进行覆盖前面所有参数
+        parameters.putAll(refundOrder.getAttrs());
         //设置签名
         setSign(parameters);
-        return requestTemplate.postForObject(getReqUrl(WxTransactionType.REFUND), XML.getMap2Xml(parameters), JSONObject.class);
+        return WxRefundResult.create(requestTemplate.postForObject(getReqUrl(WxTransactionType.REFUND), XML.getMap2Xml(parameters), JSONObject.class));
     }
 
-
-    /**
-     * 查询退款
-     *
-     * @param transactionId 支付平台订单号
-     * @param outTradeNo    商户单号
-     * @return 返回支付方查询退款后的结果
-     */
-    @Override
-    public Map<String, Object> refundquery(String transactionId, String outTradeNo) {
-        return secondaryInterface(transactionId, outTradeNo, WxTransactionType.REFUNDQUERY);
-    }
 
     /**
      * 查询退款
@@ -559,11 +558,11 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
         //获取公共参数
         Map<String, Object> parameters = getPublicParameters();
         setParameters(parameters, "transaction_id", refundOrder.getTradeNo());
-        setParameters(parameters, "out_trade_no", refundOrder.getOutTradeNo());
+        setParameters(parameters, OUT_TRADE_NO, refundOrder.getOutTradeNo());
         setParameters(parameters, "out_refund_no", refundOrder.getRefundNo());
         //设置签名
         setSign(parameters);
-        return  requestTemplate.postForObject(getReqUrl( WxTransactionType.REFUNDQUERY), XML.getMap2Xml(parameters) , JSONObject.class);
+        return requestTemplate.postForObject(getReqUrl(WxTransactionType.REFUNDQUERY), XML.getMap2Xml(parameters), JSONObject.class);
     }
 
 
@@ -576,15 +575,7 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
      */
     @Override
     public Map<String, Object> downloadbill(Date billDate, String billType) {
-
-        //获取公共参数
-        Map<String, Object> parameters = getPublicParameters();
-
-        parameters.put("bill_type", billType);
-        //目前只支持日账单
-
-        parameters.put("bill_date", DateUtils.formatDate(billDate, DateUtils.YYYYMMDD));
-
+        Map<String, Object> parameters = getDownloadBillParam(billDate, billType,false);
         //设置签名
         setSign(parameters);
         String respStr = requestTemplate.postForObject(getReqUrl(WxTransactionType.DOWNLOADBILL), XML.getMap2Xml(parameters), String.class);
@@ -599,9 +590,114 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
         return ret;
     }
 
+    /**
+     * 目前只支持日账单,增加账单返回格式
+     *
+     * @param billDate 账单类型，商户通过接口或商户经开放平台授权后其所属服务商通过接口可以获取以下账单类型：trade、signcustomer；trade指商户基于支付宝交易收单的业务账单；signcustomer是指基于商户支付宝余额收入及支出等资金变动的帐务账单；
+     * @param billType 账单时间：日账单格式为yyyy-MM-dd，月账单格式为yyyy-MM。
+     * @param path 账单返回格式 账单存储的基础路径,按月切割
+     * @return 返回支付方下载对账单的结果
+     */
+    @Override
+    public Map<String, Object> downloadbill(Date billDate, String billType, String path) {
+        Map<String, Object> parameters = getDownloadBillParam(billDate, billType,true);
+         //设置签名
+        setSign(parameters);
+        InputStream inputStream = requestTemplate.postForObject(getReqUrl(WxTransactionType.DOWNLOADBILL), XML.getMap2Xml(parameters), InputStream.class);
+        try {
+            //解压流
+            inputStream = uncompress(inputStream);
+            writeToLocal(path+DateUtils.formatDate(new Date(), DateUtils.YYYYMM)+"/"+DateUtils.formatDate(new Date(), DateUtils.YYYYMMDDHHMMSS)+".txt", inputStream);
+            Map<String, Object> ret = new HashMap<String, Object>(3);
+            ret.put(RETURN_CODE, SUCCESS);
+            ret.put(RETURN_MSG_CODE, "ok");
+            ret.put("data", path);
+            return ret;
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> ret = new HashMap<String, Object>(3);
+            ret.put(RETURN_CODE, FAIL);
+            ret.put(RETURN_MSG_CODE, "fail");
+            ret.put("data", e.getMessage());
+            return ret;
+        }
+    }
 
     /**
-     * @param transactionIdOrBillDate 支付平台订单号或者账单类型， 具体请 类型为{@link String }或者 {@link Date }，类型须强制限制，类型不对应则抛出异常{@link PayErrorException}
+     * GZIP解压缩
+     *
+     * @param input 输入流账单
+     * @return  解压后输入流
+     * @throws IOException  IOException
+     */
+    public static InputStream uncompress(InputStream input) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        GZIPInputStream ungzip = new GZIPInputStream(input);
+        byte[] buffer = new byte[1024];
+        int n;
+        while ((n = ungzip.read(buffer)) >= 0) {
+            out.write(buffer, 0, n);
+        }
+        InputStream is = new ByteArrayInputStream(out.toByteArray());
+        return is;
+    }
+
+    /**
+     * 将InputStream写入本地文件
+     * @param destination 写入本地目录
+     * @param inputStream 输入流
+     * @throws IOException IOException
+     */
+    private void writeToLocal(String destination, InputStream inputStream)
+            throws IOException {
+
+            // 判断字节大小
+            if (inputStream.available() != 0) {
+                System.out.println("结果大小:" + inputStream.available());
+                File file = new File(destination);
+                if (!file.getParentFile().exists()) {
+                    boolean result = file.getParentFile().mkdirs();
+                    if (!result) {
+                        System.out.println("创建失败");
+                    }
+                }
+                OutputStream out = new FileOutputStream(file);
+                int size = 0;
+                int len = 0;
+                byte[] buf = new byte[1024];
+                while ((size = inputStream.read(buf)) != -1) {
+                    len += size;
+                    out.write(buf, 0, size);
+                }
+                System.out.println("最终写入字节数大小:" + len);
+                inputStream.close();
+                out.close();
+            }
+    }
+
+
+    /**
+     * 下载账单公共参数
+     * @param billDate 账单类型，商户通过接口或商户经开放平台授权后其所属服务商通过接口可以获取以下账单类型：trade、signcustomer；trade指商户基于支付宝交易收单的业务账单；signcustomer是指基于商户支付宝余额收入及支出等资金变动的帐务账单；
+     * @param billType 账单时间：日账单格式为yyyy-MM-dd，月账单格式为yyyy-MM。
+     * @param tarType 账单返回格式 默认返回流false ，gzip 时候true
+     * @return
+     */
+    private Map<String, Object> getDownloadBillParam(Date billDate, String billType,boolean tarType) {
+        //获取公共参数
+        Map<String, Object> parameters = getPublicParameters();
+        parameters.put("bill_type", billType);
+        //目前只支持日账单
+        parameters.put("bill_date", DateUtils.formatDate(billDate, DateUtils.YYYYMMDD));
+        if(tarType){
+            parameters.put("tar_type", "GZIP");
+        }
+        return parameters;
+    }
+
+
+    /**
+     * @param transactionIdOrBillDate 支付平台订单号或者账单日期， 具体请 类型为{@link String }或者 {@link Date }，类型须强制限制，类型不对应则抛出异常{@link PayErrorException}
      * @param outTradeNoBillType      商户单号或者 账单类型
      * @param transactionType         交易类型
      * @return 返回支付方对应接口的结果
@@ -626,14 +722,11 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
 
         //获取公共参数
         Map<String, Object> parameters = getPublicParameters();
-        if (StringUtils.isEmpty((String) transactionIdOrBillDate)) {
-            parameters.put("out_trade_no", outTradeNoBillType);
-        } else {
-            parameters.put("transaction_id", transactionIdOrBillDate);
-        }
+        setParameters(parameters, OUT_TRADE_NO, outTradeNoBillType);
+        setParameters(parameters, "transaction_id", (String) transactionIdOrBillDate);
         //设置签名
         setSign(parameters);
-        return  requestTemplate.postForObject(getReqUrl(transactionType), XML.getMap2Xml(parameters) , JSONObject.class);
+        return requestTemplate.postForObject(getReqUrl(transactionType), XML.getMap2Xml(parameters), JSONObject.class);
     }
 
     /**
@@ -647,7 +740,6 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
      *              ◆ XML具有可扩展性，因此返回参数可能会有新增，而且顺序可能不完全遵循此文档规范，如果在解析回包的时候发生错误，请商户务必不要换单重试，请商户联系客服确认付款情况。如果有新回包字段，会更新到此API文档中。
      *              ◆ 因为错误代码字段err_code的值后续可能会增加，所以商户如果遇到回包返回新的错误码，请商户务必不要换单重试，请商户联系客服确认付款情况。如果有新的错误码，会更新到此API文档中。
      *              ◆ 错误代码描述字段err_code_des只供人工定位问题时做参考，系统实现时请不要依赖这个字段来做自动化处理。
-     *
      *              </pre>
      * @return 对应的转账结果
      */
@@ -672,7 +764,7 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
         }
         parameters.put(SIGN, createSign(SignUtils.parameterText(parameters, "&", SIGN), payConfigStorage.getInputCharset()));
 
-        return getHttpRequestTemplate().postForObject(getReqUrl(order.getTransferType()),  XML.getMap2Xml(parameters), JSONObject.class);
+        return getHttpRequestTemplate().postForObject(getReqUrl(order.getTransferType()), XML.getMap2Xml(parameters), JSONObject.class);
     }
 
     /**
@@ -723,7 +815,6 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
      * @param outNo          商户转账订单号
      * @param wxTransferType 微信转账类型，.....这里没办法了只能这样写(┬＿┬)，请见谅 {@link com.egzosn.pay.wx.bean.WxTransferType}
      *                       <p>
-     *                       <p>
      *                       <a href="https://pay.weixin.qq.com/wiki/doc/api/tools/mch_pay.php?chapter=14_3">企业付款到零钱</a>
      *                       <a href="https://pay.weixin.qq.com/wiki/doc/api/tools/mch_pay.php?chapter=24_3">商户企业付款到银行卡</a>
      *                       </p>
@@ -740,18 +831,18 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
             throw new PayErrorException(new WxPayError(FAILURE, "微信转账类型 #transferQuery(String outNo, String wxTransferType) 必填，详情com.egzosn.pay.wx.bean.WxTransferType"));
         }
         //如果类型为余额方式
-        if (TRANSFERS.getType().equals(wxTransferType) || GETTRANSFERINFO.getType().equals(wxTransferType)){
-            return getHttpRequestTemplate().postForObject(getReqUrl(GETTRANSFERINFO),  XML.getMap2Xml(parameters), JSONObject.class);
+        if (TRANSFERS.getType().equals(wxTransferType) || GETTRANSFERINFO.getType().equals(wxTransferType)) {
+            return getHttpRequestTemplate().postForObject(getReqUrl(GETTRANSFERINFO), XML.getMap2Xml(parameters), JSONObject.class);
         }
         //默认查询银行卡的记录
-        return getHttpRequestTemplate().postForObject(getReqUrl(QUERY_BANK),  XML.getMap2Xml(parameters), JSONObject.class);
+        return getHttpRequestTemplate().postForObject(getReqUrl(QUERY_BANK), XML.getMap2Xml(parameters), JSONObject.class);
     }
 
 
     public String keyPublic(String content) {
         try {
             return RSA2.encrypt(content, payConfigStorage.getKeyPublic(), CIPHER_ALGORITHM, payConfigStorage.getInputCharset());
-        } catch (Exception e) {
+        } catch (GeneralSecurityException | IOException e) {
             throw new PayErrorException(new WxPayError(FAILURE, e.getLocalizedMessage()));
         }
     }
@@ -765,5 +856,71 @@ public class WxPayService extends BasePayService<WxPayConfigStorage> {
     @Override
     public PayMessage createMessage(Map<String, Object> message) {
         return WxPayMessage.create(message);
+    }
+
+    /**
+     * 微信发红包
+     *
+     * @param redpackOrder 红包实体
+     * @return 返回发红包实体后的结果
+     * @author: faymanwang 1057438332@qq.com
+     */
+    @Override
+    public Map<String, Object> sendredpack(RedpackOrder redpackOrder) {
+        Map<String, Object> parameters = new TreeMap<String, Object>();
+        redPackParam(redpackOrder, parameters);
+        if (WxSendredpackType.SENDGROUPREDPACK == redpackOrder.getTransferType()) {
+            //现金红包，小程序红包默认传1.裂变红包取传入值，且需要大于3
+            parameters.put("total_num", Math.max(redpackOrder.getTotalNum(), 3));
+            parameters.put("amt_type", "ALL_RAND");
+        } else if (WxSendredpackType.SENDMINIPROGRAMHB == redpackOrder.getTransferType()) {
+            parameters.put("notify_way", "MINI_PROGRAM_JSAPI");
+        }
+
+        parameters.put(SIGN, createSign(SignUtils.parameterText(parameters, "&", SIGN), payConfigStorage.getInputCharset()));
+        return requestTemplate.postForObject(getReqUrl(redpackOrder.getTransferType()), XML.getMap2Xml(parameters), JSONObject.class);
+    }
+
+
+    /**
+     * 查询红包记录
+     * 用于商户对已发放的红包进行查询红包的具体信息，可支持普通红包和裂变包
+     * 查询红包记录API只支持查询30天内的红包订单，30天之前的红包订单请登录商户平台查询。
+     *
+     * @param mchBillno 商户发放红包的商户订单号
+     * @return 返回查询结果
+     * @author: faymanwang 1057438332@qq.com
+     */
+    @Override
+    public Map<String, Object> gethbinfo(String mchBillno) {
+        Map<String, Object> parameters = this.getPublicParameters();
+        parameters.put("mch_billno", mchBillno);
+        parameters.put("bill_type", "MCHT");
+        parameters.put(SIGN, createSign(SignUtils.parameterText(parameters, "&", SIGN), payConfigStorage.getInputCharset()));
+        return requestTemplate.postForObject(getReqUrl(WxSendredpackType.GETHBINFO), XML.getMap2Xml(parameters), JSONObject.class);
+    }
+
+    /**
+     * 微信红包构造参数方法
+     *
+     * @param redpackOrder 红包实体
+     * @param parameters   接收参数
+     */
+    private void redPackParam(RedpackOrder redpackOrder, Map<String, Object> parameters) {
+        parameters.put(NONCE_STR, SignUtils.randomStr());
+        parameters.put(MCH_ID, payConfigStorage.getPid());
+        parameters.put("wxappid", payConfigStorage.getAppid());
+        parameters.put("send_name", redpackOrder.getSendName());
+        parameters.put("re_openid", redpackOrder.getReOpenid());
+        parameters.put("mch_billno", redpackOrder.getMchBillno());
+        parameters.put("total_amount", Util.conversionCentAmount(redpackOrder.getTotalAmount()));
+        parameters.put("total_num", 1);
+        parameters.put("wishing", redpackOrder.getWishing());
+        parameters.put("client_ip", StringUtils.isNotEmpty(redpackOrder.getIp()) ? redpackOrder.getIp() : "192.168.0.1");
+        parameters.put("act_name", redpackOrder.getActName());
+        parameters.put("remark", redpackOrder.getRemark());
+        if (StringUtils.isNotEmpty(redpackOrder.getSceneId())) {
+            parameters.put("scene_id", redpackOrder.getSceneId());
+        }
     }
 }

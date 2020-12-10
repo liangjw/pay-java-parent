@@ -1,18 +1,22 @@
 package com.egzosn.pay.common.bean;
 
+import com.egzosn.pay.common.util.str.StringUtils;
+
 import java.math.BigDecimal;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 支付订单信息
  *
  * @author egan
- *  <pre>
+ * <pre>
  *      email egzosn@gmail.com
  *      date 2016/10/19 22:34
  *  </pre>
  */
-public class PayOrder {
+public class PayOrder implements Order {
     /**
      * 商品名称
      */
@@ -66,7 +70,8 @@ public class PayOrder {
     private String wapName;
     /**
      * 用户唯一标识
-     *  微信含 sub_openid 字段
+     * 微信含 sub_openid 字段
+     * 支付宝 buyer_id
      */
     private String openid;
     /**
@@ -82,7 +87,27 @@ public class PayOrder {
      */
     private Date expirationTime;
 
+    /**
+     * 订单附加信息，可用于预设未提供的参数，这里会覆盖以上所有的订单信息，
+     */
+    private volatile Map<String, Object> attr;
 
+
+    public PayOrder() {
+    }
+
+
+    public PayOrder(String subject, String body, BigDecimal price, String outTradeNo) {
+        this(subject, body, price, outTradeNo, null);
+    }
+
+    public PayOrder(String subject, String body, BigDecimal price, String outTradeNo, TransactionType transactionType) {
+        this.subject = StringUtils.tryTrim(subject);
+        this.body = StringUtils.tryTrim(body);
+        this.price = price;
+        this.outTradeNo = StringUtils.tryTrim(outTradeNo);
+        this.transactionType = transactionType;
+    }
 
 
     public CurType getCurType() {
@@ -127,13 +152,16 @@ public class PayOrder {
 
     /**
      * 支付平台订单号,交易号
-     * @return 支付平台订单号,交易号
+     *
+     * @return 支付平台订单号, 交易号
      */
     public String getTradeNo() {
         return tradeNo;
     }
+
     /**
      * 支付平台订单号,交易号
+     *
      * @param tradeNo 支付平台订单号,交易号
      */
     public void setTradeNo(String tradeNo) {
@@ -141,7 +169,8 @@ public class PayOrder {
     }
 
     /**
-     *  获取商户订单号
+     * 获取商户订单号
+     *
      * @return 商户订单号
      */
     public String getOutTradeNo() {
@@ -150,7 +179,8 @@ public class PayOrder {
 
     /**
      * 设置商户订单号
-     * @param outTradeNo  商户订单号
+     *
+     * @param outTradeNo 商户订单号
      */
     public void setOutTradeNo(String outTradeNo) {
         this.outTradeNo = outTradeNo;
@@ -196,24 +226,6 @@ public class PayOrder {
         this.deviceInfo = deviceInfo;
     }
 
-    public PayOrder() {
-    }
-
-
-    public PayOrder(String subject, String body, BigDecimal price, String outTradeNo, TransactionType transactionType) {
-        this.subject = subject;
-        this.body = body;
-        this.price = price;
-        this.outTradeNo = outTradeNo;
-        this.transactionType = transactionType;
-    }
-    public PayOrder(String subject, String body, BigDecimal price, String outTradeNo) {
-        this.subject = subject;
-        this.body = body;
-        this.price = price;
-        this.outTradeNo = outTradeNo;
-    }
-
     public String getWapUrl() {
         return wapUrl;
     }
@@ -245,6 +257,32 @@ public class PayOrder {
     public void setExpirationTime(Date expirationTime) {
         this.expirationTime = expirationTime;
     }
+
+    @Override
+    public Map<String, Object> getAttrs() {
+        if (null == attr){
+            attr = new HashMap<>();
+        }
+        return attr;
+    }
+
+    @Override
+    public Object getAttr(String key) {
+        return getAttrs().get(key);
+    }
+
+
+    /**
+     * 添加订单信息
+     * @param key key
+     * @param value 值
+     */
+    @Override
+    public void addAttr(String key, Object value) {
+        getAttrs().put(key, value);
+    }
+
+
 
     @Override
     public String toString() {

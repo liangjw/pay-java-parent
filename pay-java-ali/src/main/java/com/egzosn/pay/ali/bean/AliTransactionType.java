@@ -18,12 +18,7 @@ import com.egzosn.pay.common.bean.TransactionType;
  * date 2016/10/19 22:58
  */
 public enum  AliTransactionType implements TransactionType {
-    /**
-     * 即时到帐
-     * 过时的名称，请换至 {@link #PAGE}
-     */
-    @Deprecated
-    DIRECT("alipay.trade.page.pay"),
+
     /**
      * 网页支付
      */
@@ -49,6 +44,20 @@ public enum  AliTransactionType implements TransactionType {
      * 声波付
      */
     WAVE_CODE("alipay.trade.pay"),
+    /**
+     * 小程序
+     */
+    MINAPP("alipay.trade.create"),
+    /**
+     * 刷脸付
+     */
+    SECURITY_CODE("alipay.trade.pay"),
+    /**
+     * 人脸初始化刷脸付
+     * 暂时未接入
+     *
+     */
+    SMILEPAY("zoloz.authentication.customer.smilepay.initialize"),
     //交易辅助接口
 
     /**
@@ -80,13 +89,10 @@ public enum  AliTransactionType implements TransactionType {
      */
     DOWNLOADBILL("alipay.data.dataservice.bill.downloadurl.query"),
     /**
-     * 转账到支付宝
+     * 查询刷脸结果信息
+     * 暂时未接入
      */
-    TRANS("alipay.fund.trans.toaccount.transfer"),
-    /**
-     * 转账查询
-     */
-    TRANS_QUERY("alipay.fund.trans.order.query")
+    FTOKEN_QUERY("zoloz.authentication.customer.ftoken.query")
     ;
 
 

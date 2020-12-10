@@ -14,7 +14,7 @@ public enum PayType implements BasePayType {
 
     aliPay{
         /**
-         *  @see com.egzosn.pay.ali.api.AliPayService  17年更新的版本,旧版本请自行切换{@link com.egzosn.pay.ali.before.api.AliPayService }
+         *  @see com.egzosn.pay.ali.api.AliPayService 
          * @param apyAccount
          * @return
          */
@@ -176,7 +176,6 @@ public class PayResponse {
         router = new PayMessageRouter(this.service);
         router
                 .rule()
-                .async(false)
                 .msgType(MsgType.text.name()) //消息类型
                 .payType(PayType.aliPay.name()) //支付账户事件类型
                 .transactionType(AliTransactionType.UNAWARE.name())//交易类型，有关回调的可在这处理
@@ -184,13 +183,11 @@ public class PayResponse {
                 .handler(autowire(new AliPayMessageHandler(payId))) //处理器
                 .end()
                 .rule()
-                .async(false)
                 .msgType(MsgType.xml.name())
                 .payType(PayType.wxPay.name())
                 .handler(autowire(new WxPayMessageHandler(payId)))
                 .end()
                 .rule()
-                .async(false)
                 .msgType(MsgType.json.name())
                 .payType(PayType.youdianPay.name())
                 .handler(autowire(new YouDianPayMessageHandler(payId)))
@@ -337,7 +334,7 @@ public class ApyAccountService {
         //获取对应的支付账户操作工具（可根据账户id）
         PayResponse payResponse =  service.getPayResponse(payId);
 
-        PayOrder order = new PayOrder("订单title", "摘要", null == price ? new BigDecimal(0.01) : price, UUID.randomUUID().toString().replace("-", ""), PayType.valueOf(payResponse.getStorage().getPayType()).getTransactionType(transactionType));
+        PayOrder order = new PayOrder("订单title", "摘要", null == price ? BigDecimal.valueOf(0.01) : price, UUID.randomUUID().toString().replace("-", ""), PayType.valueOf(payResponse.getStorage().getPayType()).getTransactionType(transactionType));
 
         //此处只有刷卡支付(银行卡支付)时需要
         if (StringUtils.isNotEmpty(bankType)){
@@ -358,7 +355,7 @@ public class ApyAccountService {
         //获取对应的支付账户操作工具（可根据账户id）
         PayResponse payResponse =  service.getPayResponse(payId);
         //获取订单信息
-        Map<String, Object> orderInfo = payResponse.getService().orderInfo(new PayOrder("订单title", "摘要", null == price ? new BigDecimal(0.01) : price, UUID.randomUUID().toString().replace("-", ""), PayType.valueOf(payResponse.getStorage().getPayType()).getTransactionType(transactionType)));
+        Map<String, Object> orderInfo = payResponse.getService().orderInfo(new PayOrder("订单title", "摘要", null == price ? BigDecimal.valueOf(0.01) : price, UUID.randomUUID().toString().replace("-", ""), PayType.valueOf(payResponse.getStorage().getPayType()).getTransactionType(transactionType)));
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         ImageIO.write(payResponse.getService().genQrPay(orderInfo), "JPEG", baos);
@@ -379,7 +376,7 @@ public class ApyAccountService {
         PayResponse payResponse =  service.getPayResponse(payId);
         Map<String, Object> data = new HashMap<>();
         data.put("code", 0);
-        PayOrder order = new PayOrder("订单title", "摘要", null == price ? new BigDecimal(0.01) : price, UUID.randomUUID().toString().replace("-", ""), PayType.valueOf(payResponse.getStorage().getPayType()).getTransactionType(transactionType));
+        PayOrder order = new PayOrder("订单title", "摘要", null == price ? BigDecimal.valueOf(0.01) : price, UUID.randomUUID().toString().replace("-", ""), PayType.valueOf(payResponse.getStorage().getPayType()).getTransactionType(transactionType));
         data.put("orderInfo",  payResponse.getService().orderInfo(order));
         return data;
     }

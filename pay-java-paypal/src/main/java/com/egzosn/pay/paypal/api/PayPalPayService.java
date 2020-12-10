@@ -16,7 +16,7 @@ import com.egzosn.pay.paypal.bean.order.*;
 import org.apache.http.Header;
 import org.apache.http.entity.ContentType;
 import org.apache.http.message.BasicHeader;
-import java.awt.image.BufferedImage;
+
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.util.*;
@@ -146,6 +146,10 @@ public class PayPalPayService extends BasePayService<PayPalConfigStorage>{
      */
     @Override
     public Map<String, Object> orderInfo(PayOrder order) {
+        if (null == order.getTransactionType()){
+            order.setTransactionType(PayPalTransactionType.sale);
+        }
+
         Amount amount = new Amount();
         if (null == order.getCurType()){
             order.setCurType(DefaultCurType.USD);
@@ -235,22 +239,7 @@ public class PayPalPayService extends BasePayService<PayPalConfigStorage>{
     public Map<String, Object> close(String tradeNo, String outTradeNo) {
         return null;
     }
-    /**
-     * 申请退款接口
-     * 废弃
-     * @param tradeNo    支付平台订单号
-     * @param outTradeNo 商户单号
-     * @param refundAmount 退款金额
-     * @param totalAmount 总金额
-     * @return 返回支付方申请退款后的结果
-     * @see #refund(RefundOrder)
-     * @deprecated {@link #refund(RefundOrder)}
-     */
-    @Deprecated
-    @Override
-    public Map<String, Object> refund(String tradeNo, String outTradeNo, BigDecimal refundAmount, BigDecimal totalAmount) {
-        return refund(new RefundOrder( tradeNo,  outTradeNo,  refundAmount,  totalAmount));
-    }
+
 
 
     /**
@@ -260,7 +249,7 @@ public class PayPalPayService extends BasePayService<PayPalConfigStorage>{
      * @return 返回支付方申请退款后的结果
      */
     @Override
-    public Map<String, Object> refund(RefundOrder refundOrder) {
+    public RefundResult refund(RefundOrder refundOrder) {
         JSONObject request =  new JSONObject();
 
         if (null != refundOrder.getRefundAmount() && BigDecimal.ZERO.compareTo( refundOrder.getRefundAmount()) == -1){
@@ -278,19 +267,52 @@ public class PayPalPayService extends BasePayService<PayPalConfigStorage>{
         HttpStringEntity httpEntity = new HttpStringEntity(request.toJSONString(), ContentType.APPLICATION_JSON);
         httpEntity.setHeaders(authHeader());
         JSONObject resp = getHttpRequestTemplate().postForObject(getReqUrl(PayPalTransactionType.REFUND),  httpEntity, JSONObject.class, refundOrder.getTradeNo());
-        return resp;
-    }
-    /**
-     * 查询退款
-     *
-     * @param tradeNo    支付平台订单号
-     * @param outTradeNo 商户单号
-     * @return 返回支付方查询退款后的结果
-     */
-    @Override
-    public Map<String, Object> refundquery(String tradeNo, String outTradeNo) {
-        JSONObject resp = getHttpRequestTemplate().getForObject(getReqUrl(PayPalTransactionType.REFUND_QUERY), authHeader(), JSONObject.class, tradeNo);
-        return resp;
+        return new BaseRefundResult(resp) {
+            @Override
+            public String getCode() {
+                return getAttrString("state");
+            }
+
+            @Override
+            public String getMsg() {
+                return null;
+            }
+
+            @Override
+            public String getResultCode() {
+                return null;
+            }
+
+            @Override
+            public String getResultMsg() {
+                return null;
+            }
+
+            @Override
+            public BigDecimal getRefundFee() {
+                return null;
+            }
+
+            @Override
+            public CurType getRefundCurrency() {
+                return null;
+            }
+
+            @Override
+            public String getTradeNo() {
+                return null;
+            }
+
+            @Override
+            public String getOutTradeNo() {
+                return null;
+            }
+
+            @Override
+            public String getRefundNo() {
+                return null;
+            }
+        };
     }
 
     /**
@@ -301,7 +323,8 @@ public class PayPalPayService extends BasePayService<PayPalConfigStorage>{
      */
     @Override
     public Map<String, Object> refundquery(RefundOrder refundOrder) {
-        return refundquery(refundOrder.getTradeNo(), refundOrder.getOutTradeNo());
+        JSONObject resp = getHttpRequestTemplate().getForObject(getReqUrl(PayPalTransactionType.REFUND_QUERY), authHeader(), JSONObject.class, refundOrder.getTradeNo());
+        return resp;
     }
 
     @Override

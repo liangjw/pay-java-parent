@@ -102,7 +102,7 @@
 
 ```java
         
-      Map result = service..query(null, "我方系统单号");
+      Map result = service.query(null, "我方系统单号");
 
 ```
 
@@ -120,7 +120,7 @@
          //Map result = service.refund(null, "我方系统单号", null, null);
          //支付宝单号与我方系统单号二选一
          RefundOrder order = new RefundOrder(null, "我方系统单号", null, null);
-         Map result = service.refund(order);
+         RefundResult result = service.refund(order);
 
 ```
 
